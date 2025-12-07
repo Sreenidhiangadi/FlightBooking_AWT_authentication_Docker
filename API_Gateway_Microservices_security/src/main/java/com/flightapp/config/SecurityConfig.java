@@ -38,7 +38,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/flight-microservice/api/flight/search").permitAll()
                         .pathMatchers(HttpMethod.POST, "/flight-microservice/api/flight/search/airline").permitAll()
                         .pathMatchers(HttpMethod.GET, "/flight-microservice/api/flight/getallflights").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/api/flight/*").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/flight-microservice/api/flight/*").permitAll()
                        
                         .pathMatchers("/booking-microservice/api/flight/booking/**").authenticated()
                         .pathMatchers("/booking-microservice/api/flight/ticket/**").authenticated()

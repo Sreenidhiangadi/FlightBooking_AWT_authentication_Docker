@@ -25,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 @Service
 @RequiredArgsConstructor
@@ -39,42 +41,60 @@ public class BookingServiceImpl implements BookingService {
 
 	@Override
 	@CircuitBreaker(name = "bookingServiceCircuitBreaker", fallbackMethod = "bookTicketFallback")
-	public Mono<String> bookTicket(String userEmail, String departureFlightId, String returnFlightId,
-			List<Passenger> passengers, FLIGHTTYPE tripType) {
+	public Mono<String> bookTicket(String userEmail,
+	                               String departureFlightId,
+	                               String returnFlightId,
+	                               List<Passenger> passengers,
+	                               FLIGHTTYPE tripType) {
 
-		int seatCount = passengers.size();
+	    int seatCount = passengers.size();
 
-		return Mono.fromCallable(() -> {
-			FlightDto depFlight = flightClient.getFlight(departureFlightId);
-			if (depFlight == null)
-				throw new RuntimeException("Departure flight not found");
-			if (depFlight.getAvailableSeats() < seatCount)
-				throw new RuntimeException("Not enough seats in departure flight");
+	    return ReactiveSecurityContextHolder.getContext()
+	            .map(ctx -> (JwtAuthenticationToken) ctx.getAuthentication())
+	            .map(jwtAuth -> "Bearer " + jwtAuth.getToken().getTokenValue())
+	   
+	            .flatMap(bearer -> Mono.fromCallable(() -> {
+	                FlightDto depFlight = flightClient.getFlight(bearer, departureFlightId);
+	                if (depFlight == null)
+	                    throw new RuntimeException("Departure flight not found");
+	                if (depFlight.getAvailableSeats() < seatCount)
+	                    throw new RuntimeException("Not enough seats in departure flight");
 
-			FlightDto retFlight = null;
-			if (tripType == FLIGHTTYPE.ROUND_TRIP && returnFlightId != null) {
-				retFlight = flightClient.getFlight(returnFlightId);
-				if (retFlight == null)
-					throw new RuntimeException("Return flight not found");
-				if (retFlight.getAvailableSeats() < seatCount)
-					throw new RuntimeException("Not enough seats in return flight");
-			}
+	                FlightDto retFlight = null;
+	                if (tripType == FLIGHTTYPE.ROUND_TRIP && returnFlightId != null) {
+	                    retFlight = flightClient.getFlight(bearer, returnFlightId);
+	                    if (retFlight == null)
+	                        throw new RuntimeException("Return flight not found");
+	                    if (retFlight.getAvailableSeats() < seatCount)
+	                        throw new RuntimeException("Not enough seats in return flight");
+	                }
 
-			flightClient.reserveSeats(departureFlightId, seatCount);
+	                flightClient.reserveSeats(bearer, departureFlightId, seatCount);
 
-			if (retFlight != null) {
-				try {
-					flightClient.reserveSeats(returnFlightId, seatCount);
-				} catch (Exception e) {
-					flightClient.releaseSeats(departureFlightId, seatCount);
-					throw new RuntimeException("Failed to reserve return flight, rolled back departure");
-				}
-			}
+	                if (retFlight != null) {
+	                    try {
+	                        flightClient.reserveSeats(bearer, returnFlightId, seatCount);
+	                    } catch (Exception e) {
+	                        flightClient.releaseSeats(bearer, departureFlightId, seatCount);
+	                        throw new RuntimeException(
+	                                "Failed to reserve return flight, rolled back departure"
+	                        );
+	                    }
+	                }
 
-			return new CheckedFlights(depFlight, retFlight);
-		}).subscribeOn(Schedulers.boundedElastic()).flatMap(checked -> createTicket(userEmail, departureFlightId,
-				returnFlightId, passengers, tripType, checked.dep(), checked.ret()));
+	                return new CheckedFlights(depFlight, retFlight);
+	            }).subscribeOn(Schedulers.boundedElastic()))
+	            .flatMap(checked -> createTicket(
+	                    userEmail,
+	                    departureFlightId,
+	                    returnFlightId,
+	                    passengers,
+	                    tripType,
+	                    checked.dep(),
+	                    checked.ret()
+	            ));
 	}
+
 
 	private Mono<String> bookTicketFallback(String userEmail, String departureFlightId, String returnFlightId,
 			List<Passenger> passengers, FLIGHTTYPE tripType, Throwable throwable) {
@@ -121,25 +141,32 @@ public class BookingServiceImpl implements BookingService {
 
 	@Override
 	public Mono<String> cancelByPnr(String pnr) {
-		return ticketRepository.findByPnr(pnr)
-				.switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "PNR not found")))
-				.flatMap(ticket -> {
-					if (ticket.isCanceled())
-						return Mono.just("Ticket already cancelled");
+	    return ticketRepository.findByPnr(pnr)
+	            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "PNR not found")))
+	            .flatMap(ticket -> {
+	                if (ticket.isCanceled())
+	                    return Mono.just("Ticket already cancelled");
 
-					int seatCount = (ticket.getSeatsBooked() != null && !ticket.getSeatsBooked().isEmpty())
-							? ticket.getSeatsBooked().split(",").length
-							: 1;
+	                int seatCount = (ticket.getSeatsBooked() != null && !ticket.getSeatsBooked().isEmpty())
+	                        ? ticket.getSeatsBooked().split(",").length
+	                        : 1;
 
-					return Mono.fromCallable(() -> {
-						flightClient.releaseSeats(ticket.getDepartureFlightId(), seatCount);
-						if (ticket.getReturnFlightId() != null) {
-							flightClient.releaseSeats(ticket.getReturnFlightId(), seatCount);
-						}
-						return true;
-					}).subscribeOn(Schedulers.boundedElastic()).then(updateCancellation(ticket));
-				});
+	                return ReactiveSecurityContextHolder.getContext()
+	                        .map(ctx -> (JwtAuthenticationToken) ctx.getAuthentication())
+	                        .map(jwtAuth -> "Bearer " + jwtAuth.getToken().getTokenValue())
+	                        .flatMap(bearer ->
+	                                Mono.fromCallable(() -> {
+	                                    flightClient.releaseSeats(bearer, ticket.getDepartureFlightId(), seatCount);
+	                                    if (ticket.getReturnFlightId() != null) {
+	                                        flightClient.releaseSeats(bearer, ticket.getReturnFlightId(), seatCount);
+	                                    }
+	                                    return true;
+	                                }).subscribeOn(Schedulers.boundedElastic())
+	                        )
+	                        .then(updateCancellation(ticket));
+	            });
 	}
+
 
 	private Mono<String> updateCancellation(Ticket ticket) {
 		ticket.setCanceled(true);
