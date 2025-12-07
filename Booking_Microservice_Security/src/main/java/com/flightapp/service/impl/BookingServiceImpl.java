@@ -152,8 +152,9 @@ public class BookingServiceImpl implements BookingService {
 	    return ticketRepository.findByPnr(pnr)
 	            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "PNR not found")))
 	            .flatMap(ticket -> {
-	                if (ticket.isCanceled())
+	                if (ticket.isCanceled()) {
 	                    return Mono.just("Ticket already cancelled");
+	                }
 
 	                int seatCount = (ticket.getSeatsBooked() != null && !ticket.getSeatsBooked().isEmpty())
 	                        ? ticket.getSeatsBooked().split(",").length
@@ -164,16 +165,29 @@ public class BookingServiceImpl implements BookingService {
 	                        .map(jwtAuth -> "Bearer " + jwtAuth.getToken().getTokenValue())
 	                        .flatMap(bearer ->
 	                                Mono.fromCallable(() -> {
+	                                    FlightDto depFlight = flightClient.getFlight(bearer, ticket.getDepartureFlightId());
+	                                    LocalDateTime departureTime = depFlight.getDepartureTime();
+	                                    LocalDateTime now = LocalDateTime.now();
+
+	                                    if (!departureTime.minusHours(24).isAfter(now)) {
+	                                        throw new ResponseStatusException(
+	                                                HttpStatus.BAD_REQUEST,
+	                                                "Cannot cancel ticket within 24 hours of departure"
+	                                        );
+	                                    }
+
 	                                    flightClient.releaseSeats(bearer, ticket.getDepartureFlightId(), seatCount);
 	                                    if (ticket.getReturnFlightId() != null) {
 	                                        flightClient.releaseSeats(bearer, ticket.getReturnFlightId(), seatCount);
 	                                    }
-	                                    return true;
+
+	                                    return ticket;
 	                                }).subscribeOn(Schedulers.boundedElastic())
 	                        )
-	                        .then(updateCancellation(ticket));
+	                        .flatMap(this::updateCancellation);
 	            });
 	}
+
 
 
 	private Mono<String> updateCancellation(Ticket ticket) {

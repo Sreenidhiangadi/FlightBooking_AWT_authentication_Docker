@@ -3,6 +3,7 @@ package com.flightapp.service.impl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -213,16 +214,36 @@ class BookingServiceImplTest {
     }
 
     @Test
-    void getByPnr_shouldReturnTicket() {
+    void getByPnr_shouldReturnTicketWithPassengers() {
         Ticket ticket = new Ticket();
+        ticket.setId("TICKET_1");
         ticket.setPnr("PNR123");
         ticket.setUserEmail("sreenidhi@gmail.com");
 
-        when(ticketRepository.findByPnr("PNR123")).thenReturn(Mono.just(ticket));
+        Passenger p1 = new Passenger();
+        p1.setName("Passenger One");
+        p1.setTicketId("TICKET_1");
 
-        StepVerifier.create(bookingService.getByPnr("PNR123")).expectNext(ticket).verifyComplete();
+        Passenger p2 = new Passenger();
+        p2.setName("Passenger Two");
+        p2.setTicketId("TICKET_1");
+
+        when(ticketRepository.findByPnr("PNR123")).thenReturn(Mono.just(ticket));
+        when(passengerRepository.findByTicketId("TICKET_1"))
+                .thenReturn(Flux.just(p1, p2));
+
+        StepVerifier.create(bookingService.getByPnr("PNR123"))
+                .assertNext(t -> {
+                    assertEquals("PNR123", t.getPnr());
+                    assertEquals("sreenidhi@gmail.com", t.getUserEmail());
+                    assertTrue(t.getPassengers() != null);
+                    assertEquals(2, t.getPassengers().size());
+                    assertEquals("Passenger One", t.getPassengers().get(0).getName());
+                })
+                .verifyComplete();
 
         verify(ticketRepository).findByPnr("PNR123");
+        verify(passengerRepository).findByTicketId("TICKET_1");
     }
 
     @Test
@@ -288,6 +309,11 @@ class BookingServiceImplTest {
             return Mono.just(t);
         });
 
+        FlightDto depFlight = new FlightDto();
+        depFlight.setId("DEPX");
+        depFlight.setDepartureTime(LocalDateTime.now().plusDays(2));
+        when(flightClient.getFlight(anyString(), eq("DEPX"))).thenReturn(depFlight);
+
         StepVerifier.create(
                         bookingService
                                 .cancelByPnr("PNR_ONEWAY")
@@ -316,6 +342,11 @@ class BookingServiceImplTest {
             return Mono.just(t);
         });
 
+        FlightDto depFlight = new FlightDto();
+        depFlight.setId("DEPY");
+        depFlight.setDepartureTime(LocalDateTime.now().plusDays(3));
+        when(flightClient.getFlight(anyString(), eq("DEPY"))).thenReturn(depFlight);
+
         StepVerifier.create(
                         bookingService
                                 .cancelByPnr("PNR_RT")
@@ -328,5 +359,40 @@ class BookingServiceImplTest {
         verify(flightClient).releaseSeats(anyString(), eq("RETY"), eq(3));
         verify(ticketRepository).save(argThat(Ticket::isCanceled));
         verify(kafkaTemplate).send(eq("booking-events"), eq("PNR_RT"), any(BookingEvent.class));
+    }
+
+    @Test
+    void cancelByPnr_within24Hours_shouldReturnBadRequest() {
+        Ticket ticket = new Ticket();
+        ticket.setPnr("PNR_SOON");
+        ticket.setCanceled(false);
+        ticket.setSeatsBooked("A1");
+        ticket.setDepartureFlightId("DEPSOON");
+        ticket.setReturnFlightId(null);
+
+        when(ticketRepository.findByPnr("PNR_SOON")).thenReturn(Mono.just(ticket));
+
+        FlightDto depFlight = new FlightDto();
+        depFlight.setId("DEPSOON");
+        depFlight.setDepartureTime(LocalDateTime.now().plusHours(10));
+        when(flightClient.getFlight(anyString(), eq("DEPSOON"))).thenReturn(depFlight);
+
+        StepVerifier.create(
+                        bookingService
+                                .cancelByPnr("PNR_SOON")
+                                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(jwtAuth()))
+                )
+                .expectErrorSatisfies(ex -> {
+                    assertTrue(ex instanceof ResponseStatusException);
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertEquals(HttpStatus.BAD_REQUEST, rse.getStatusCode());
+                    assertEquals("Cannot cancel ticket within 24 hours of departure", rse.getReason());
+                })
+                .verify();
+
+        verify(ticketRepository).findByPnr("PNR_SOON");
+        verify(flightClient).getFlight(anyString(), eq("DEPSOON"));
+        verify(flightClient, never()).releaseSeats(anyString(), anyString(), anyInt());
+        verify(ticketRepository, never()).save(any(Ticket.class));
     }
 }
