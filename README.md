@@ -1,170 +1,169 @@
-Flight Booking Microservices System
+# Flight Booking Microservices System
 
-A complete microservices-based flight booking platform built using Spring Boot, Spring Cloud, JWT Security, Kafka, MongoDB, Docker, and WebFlux.
-This project demonstrates real-world distributed architecture with secure gateway routing, centralized configuration, service discovery, event-driven messaging, and reactive booking flows.
+A complete microservices-based flight booking platform built using **Spring Boot**, **Spring Cloud**, **JWT Security**, **Kafka**, **MongoDB**, **Docker**, and **WebFlux**.
 
- Features Overview
- 1. Secure API Gateway
+This project demonstrates real-world distributed architecture with secure gateway routing, centralized configuration, service discovery, reactive programming, and event-driven communication.
 
-Built using Spring Cloud Gateway (WebFlux), responsible for:
+---
 
-JWT authentication & validation
+#  Features Overview
 
-Role-based access
+##  1. Secure API Gateway (WebFlux)
 
-Dynamic routing
+The API Gateway is built using **Spring Cloud Gateway** and acts as the single entry point to all microservices.
 
-Blocking unauthorized requests before hitting microservices
+### Responsibilities:
+- JWT Authentication & Validation  
+- Role-Based Access Control  
+- Dynamic Routing  
+- Blocking Unauthorized Requests  
+- Reactive Backpressure Handling  
 
-Backpressure-safe request handling
+### Security Powered By:
+- **OAuth2 Resource Server (JWT)**
+- **Reactive Spring Security**
 
-Security powered by:
+---
 
-OAuth2 Resource Server (JWT)
+##  2. Microservices Included
 
-Reactive Spring Security
+| Service | Responsibilities |
+|--------|------------------|
+| **User Service** | Register user, login, JWT token generation |
+| **Flight Service** | Add flights, update flights, manage inventory |
+| **Booking Service** | Book tickets, cancel tickets, calculate pricing |
+| **Notification Service** | Sends email notifications on booking/cancellation |
+| **API Gateway** | Authentication, routing, filtering |
+| **Config Server** | Centralized configuration management |
+| **Eureka Server** | Service discovery & load balancing |
 
- 2. Microservices Included
-Service	Responsibilities
-User Service	Registration, Login, JWT Token Generation
-Flight Service	Add Flights, Update Flights, Search Flights, Manage Seats
-Booking Service	Book Flights, Cancel Flights, Price Calculation, PNR Generation
-Notification Service	Kafka Consumer, Sends Email on Booking & Cancellation
-API Gateway	Routing, Authentication
-Config Server	Centralized Config Management
-Eureka Server	Service Discovery & Load Balancing
+---
 
-Each microservice:
+#  3. Event-Driven Messaging (Kafka)
 
-Has its own Dockerfile
+The system uses **Apache Kafka** to publish and consume booking events:
 
-Has its own MongoDB database
+### Published Events:
+- `BOOKING_CONFIRMED`
+- `BOOKING_CANCELLED`
 
-Is independently deployable
+### Flow:
+1. **Booking Service** → publishes event to topic `booking-events`  
+2. **Notification Service** → listens via `@KafkaListener`  
+3. Email is automatically triggered  
 
- 3. Event-Driven Messaging (Kafka)
+---
 
-The system uses Kafka to publish booking events.
+#  4. Databases (MongoDB)
 
-Booking Service produces:
+Each microservice uses its own database following **Database per Service** design pattern:
 
-BOOKING_CONFIRMED
-
-BOOKING_CANCELLED
-
-Notification Service consumes:
-
-Automatically sends Gmail SMTP emails with:
-
-Booking Confirmation
-
-Cancellation Notice
+- `userservicedb`
+- `flightservicedb`
+- `bookingservicedb`
 
 This ensures:
+- Loose coupling  
+- Independent scaling  
+- Data ownership per service  
 
- Loose coupling
- Scalability
- Non-blocking communication
+---
 
- 4. Databases (MongoDB Per Service)
+#  5. Fully Dockerized Architecture
 
-Following the Database-per-Service pattern:
+Each microservice includes its own Dockerfile and is orchestrated using **docker-compose**.
 
-userservicedb
+---
 
-flightservicedb
+##  Tech Stack
 
-bookingservicedb
+###  Backend
+- **Java 17**
+- **Spring Boot**
+- **Spring WebFlux (Reactive)**
+- **Spring Cloud**
+  - API Gateway  
+  - Config Server  
+  - Eureka Discovery Server  
+  - OpenFeign  
+- **Spring Security (OAuth2 + JWT Resource Server)**
 
-This avoids tight coupling and gives each service full data ownership.
+###  Database
+- **MongoDB (Reactive MongoDB Driver)**  
+- Separate DB per microservice:
+  - userservicedb  
+  - flightservicedb  
+  - bookingservicedb  
 
- 5. Fully Dockerized Deployment
+###  Messaging
+- **Apache Kafka**
+- **Zookeeper**
+- **Spring Kafka**
 
-Each microservice contains a Dockerfile, and one docker-compose.yml orchestrates everything.
+###  DevOps
+- **Docker**
+- **Docker Compose**
+- **Multi-stage Dockerfiles**
 
-Start entire system:
+###  Build & Tools
+- **Maven**
+- **Lombok**
+- **JUnit 5 + Mockito**
 
+---  
+##  ER Diagram
+
+```mermaid
+erDiagram
+    USER ||--o{ TICKET : books
+    FLIGHT ||--o{ TICKET : includes
+    TICKET ||--o{ PASSENGER : contains
+
+    USER {
+        string id
+        string name
+        string gender
+        int age
+        string email
+        string password
+        Role role
+    }
+
+    FLIGHT {
+        string id
+        string airline
+        string fromPlace
+        string toPlace
+        datetime departureTime
+        datetime arrivalTime
+        float price
+        int totalSeats
+        int availableSeats
+    }
+
+    TICKET {
+        string id
+        string pnr
+        string userId
+        string departureFlightId
+        string returnFlightId
+        FlightType tripType
+        datetime bookingTime
+        string seatsBooked
+        float totalPrice
+        boolean canceled
+    }
+
+    PASSENGER {
+        string id
+        string name
+        string gender
+        int age
+        string seatNumber
+        string mealPreference
+        string ticketId
+    }
+---
+### Run All Services:
+```sh
 docker-compose up --build
-
-
-Stop everything:
-
-docker-compose down
-
-
-This starts:
-
-Eureka
-
-Config Server
-
-API Gateway
-
-User / Flight / Booking / Notification Services
-
-Kafka + Zookeeper
-
-MongoDB
-
- Security Architecture
- Why OAuth2 Resource Server Instead of Custom JWT Filters?
-
-Because:
-
-Token validation handled internally by Spring
-
-No manual parsing required
-
-Zero duplicated code
-
-Aligns with Spring Security 6+ best practices
-
-Works perfectly with microservices
-
-JWT is generated only in User Service.
-Gateway + other microservices simply validate the token using one shared secret.
-
- Email Notification Flow
-Booking Service:
-kafkaTemplate.send("booking-events", ticket.getPnr(), event);
-
-Notification Service:
-@KafkaListener(topics = "booking-events", groupId = "notification-microservice")
-
-
-Sends email through Gmail SMTP:
-
-Booking confirmation
-
-Cancellation notification
-
-Everything is async & reliable via Kafka.
-
- Tech Stack
-Backend
-
-Java 17
-
-Spring Boot 3
-
-Spring WebFlux
-
-Spring Cloud (Gateway, Eureka, Config)
-
-JWT Security
-
-Spring Kafka
-
-MongoDB Reactive
-
-DevOps
-
-Docker
-
-Docker Compose
-
-Messaging
-
-Apache Kafka
-
-Zookeeper
