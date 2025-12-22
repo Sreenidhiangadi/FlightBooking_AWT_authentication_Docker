@@ -1,7 +1,7 @@
 package com.flightapp.entity;
 
 import java.time.LocalDateTime;
-
+import java.time.ZonedDateTime;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
