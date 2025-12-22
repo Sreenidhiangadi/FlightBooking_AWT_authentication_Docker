@@ -39,12 +39,7 @@ public class BookingController {
 		private List<@Valid Passenger> passengers;
 	}
 
-//	@PostMapping("/booking/{flightId}")
-//	public Mono<ResponseEntity<String>> bookTicket(@PathVariable("flightId") String departureFlightId,
-//			@RequestBody BookingRequest request) {
-//		return bookingService.bookTicket(request.getUserEmail(), departureFlightId, request.getReturnFlightId(),
-//				request.getPassengers(), request.getTripType()).map(pnr -> ResponseEntity.ok("PNR: " + pnr));
-//	}
+
 	  @PostMapping("/booking/{flightId}")
 	    public Mono<ResponseEntity<String>> bookTicket(@PathVariable("flightId") String departureFlightId,
 	                                                   @RequestBody BookingRequest request,
@@ -60,10 +55,7 @@ public class BookingController {
 		return bookingService.getByPnr(pnr);
 	}
 
-//	@GetMapping("/booking/history/{emailId}")
-//	public Flux<Ticket> history(@PathVariable String emailId) {
-//		return bookingService.historyByEmail(emailId);
-//	}
+
 	   @GetMapping("/booking/history")
     public Flux<Ticket> myHistory(JwtAuthenticationToken auth) {
         return bookingService.historyByEmail(auth.getToken().getSubject());
@@ -73,8 +65,9 @@ public class BookingController {
 	    public Flux<Ticket> historyByEmailForAdmin(@PathVariable String emailId) {
 	        return bookingService.historyByEmail(emailId);
 	    }
+	   
 	@DeleteMapping("/booking/cancel/{pnr}")
-	public Mono<String> cancel(@PathVariable String pnr) {
+	public Mono<ResponseEntity<String>> cancel(@PathVariable String pnr) {
 		return bookingService.cancelByPnr(pnr);
 	}
 }
