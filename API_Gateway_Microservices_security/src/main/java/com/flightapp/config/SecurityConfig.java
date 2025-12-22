@@ -25,8 +25,10 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.reactive.CorsWebFilter;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+
+
 import reactor.core.publisher.Mono;
 
 @Configuration
@@ -34,65 +36,92 @@ import reactor.core.publisher.Mono;
 @EnableReactiveMethodSecurity
 public class SecurityConfig {
 
-	@Bean
-	public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
-	    return http
-	            .csrf(ServerHttpSecurity.CsrfSpec::disable)
-	            .cors(cors -> {})
-	            .authorizeExchange(exchanges -> exchanges
-	                    .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-	                    .pathMatchers("/actuator/**").permitAll()
-	                    .pathMatchers("/eureka/**").permitAll()
-
-	                    .pathMatchers(HttpMethod.POST, "/user-microservice/api/user/register").permitAll()
-	                    .pathMatchers(HttpMethod.POST, "/user-microservice/api/user/login").permitAll()
-	                    .pathMatchers(HttpMethod.POST, "/user-microservice/api/admin/register").permitAll()
-	                    .pathMatchers(HttpMethod.POST, "/user-microservice/api/admin/login").permitAll()
-
-	                    .pathMatchers(HttpMethod.POST, "/flight-microservice/api/flight/search").permitAll()
-	                    .pathMatchers(HttpMethod.POST, "/flight-microservice/api/flight/search/airline").permitAll()
-
-	                    .anyExchange().authenticated()
-	            )
-	            .oauth2ResourceServer(oauth2 ->
-	                    oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter()))
-	            )
-	            .build();
-	}
-
-    private Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtAuthConverter() {
-        return jwt -> {
-            List<String> roles = jwt.getClaimAsStringList("roles");
-            Collection<GrantedAuthority> authorities =
-                    roles == null ? List.of()
-                            : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
-
-            return Mono.just(new JwtAuthenticationToken(jwt, authorities));
-        };
-    }
-    
     @Bean
-    public CorsWebFilter corsWebFilter() {
-        CorsConfiguration config = new CorsConfiguration();
+    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+        http.cors();
+        return http
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
 
+                .authorizeExchange(exchanges -> exchanges
+                        .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .pathMatchers("/actuator/**").permitAll()
+                        .pathMatchers("/eureka/**").permitAll()
+
+                        .pathMatchers(HttpMethod.POST,
+                                "/user-microservice/api/user/register",
+                                "/user-microservice/api/user/login",
+                                "/user-microservice/api/admin/register",
+                                "/user-microservice/api/admin/login"
+                        ).permitAll()
+                        .pathMatchers(HttpMethod.POST,
+                                "/flight-microservice/api/flight/airline/inventory/add"
+                        ).hasRole("ADMIN")
+
+                        .pathMatchers(HttpMethod.PUT,
+                                "/flight-microservice/api/flight/update/**"
+                        ).hasRole("ADMIN")
+
+                        .pathMatchers(HttpMethod.DELETE,
+                                "/flight-microservice/api/flight/delete/**"
+                        ).hasRole("ADMIN")
+
+                        .pathMatchers(HttpMethod.POST,
+                                "/flight-microservice/api/flight/search",
+                                "/flight-microservice/api/flight/search/airline"
+                        ).permitAll()
+
+                        .pathMatchers(HttpMethod.GET,
+                                "/flight-microservice/api/flight/getallflights"
+                        ).permitAll()
+
+                        .anyExchange().authenticated()
+                )
+
+                .oauth2ResourceServer(oauth2 ->
+                        oauth2.jwt(jwt ->
+                                jwt.jwtAuthenticationConverter(jwtAuthConverter())
+                        )
+                )
+
+                .build();
+    }
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.addAllowedOrigin("http://localhost:4200");
+        config.addAllowedMethod("*");
+        config.addAllowedHeader("*");
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of("http://localhost:4200"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
 
-        return new CorsWebFilter(source);
+        return source;
+    }
+
+    private Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtAuthConverter() {
+        return jwt -> {
+            List<String> roles = jwt.getClaimAsStringList("roles");
+
+            Collection<GrantedAuthority> authorities =
+                    roles == null
+                            ? List.of()
+                            : roles.stream()
+                                   .map(SimpleGrantedAuthority::new)
+                                   .collect(Collectors.toList());
+
+            return Mono.just(new JwtAuthenticationToken(jwt, authorities));
+        };
     }
 
     @Bean
     public ReactiveJwtDecoder reactiveJwtDecoder(
             @Value("${spring.security.oauth2.resourceserver.jwt.secret-key}") String secret) {
 
-        SecretKey key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        SecretKey key =
+                new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+
         return NimbusReactiveJwtDecoder.withSecretKey(key).build();
     }
 }
