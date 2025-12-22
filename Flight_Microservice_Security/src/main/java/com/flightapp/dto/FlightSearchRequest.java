@@ -1,6 +1,6 @@
 package com.flightapp.dto;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 import lombok.Data;
 
@@ -8,6 +8,5 @@ import lombok.Data;
 public class FlightSearchRequest {
 	private String fromPlace;
 	private String toPlace;
-	private LocalDateTime startTime;
-	private LocalDateTime endTime;
+	private LocalDate date;
 }
