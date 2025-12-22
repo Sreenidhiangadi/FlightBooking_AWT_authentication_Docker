@@ -53,7 +53,6 @@ public class ServiceSecurityConfig {
                     roles == null ? List.of()
                             : roles.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
 
-            // principal name = email (sub)
             return Mono.just(new JwtAuthenticationToken(jwt, authorities, jwt.getSubject()));
         };
     }
