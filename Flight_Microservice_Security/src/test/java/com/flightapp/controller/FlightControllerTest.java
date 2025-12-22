@@ -1,21 +1,19 @@
 //package com.flightapp.controller;
 //
-//import static org.assertj.core.api.Assertions.assertThat;
 //import static org.mockito.ArgumentMatchers.any;
-//import static org.mockito.Mockito.times;
-//import static org.mockito.Mockito.verify;
-//import static org.mockito.Mockito.when;
+//import static org.mockito.ArgumentMatchers.eq;
 //
-//import java.time.LocalDateTime;
 //import java.util.List;
 //import java.util.Map;
 //
-//import org.junit.jupiter.api.BeforeEach;
 //import org.junit.jupiter.api.Test;
-//import org.junit.jupiter.api.extension.ExtendWith;
-//import org.mockito.ArgumentCaptor;
-//import org.mockito.Mock;
-//import org.mockito.junit.jupiter.MockitoExtension;
+//import org.mockito.Mockito;
+//import org.springframework.beans.factory.annotation.Autowired;
+//import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+//import org.springframework.boot.test.context.SpringBootTest;
+//import org.springframework.boot.test.mock.mockito.MockBean;
+//import org.springframework.http.MediaType;
+//import org.springframework.test.web.reactive.server.WebTestClient;
 //
 //import com.flightapp.dto.FlightSearchRequest;
 //import com.flightapp.entity.Flight;
@@ -23,131 +21,159 @@
 //
 //import reactor.core.publisher.Flux;
 //import reactor.core.publisher.Mono;
-//import reactor.test.StepVerifier;
 //
-//@ExtendWith(MockitoExtension.class)
+//@SpringBootTest(
+//        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+//        properties = {
+//                "spring.security.enabled=false"
+//        }
+//)
+//@AutoConfigureWebTestClient
 //class FlightControllerTest {
 //
-//	@Mock
-//	private FlightService flightService;
+//    @Autowired
+//    private WebTestClient webTestClient;
 //
-//	private FlightController flightController;
+//    @MockBean
+//    private FlightService flightService;
 //
-//	@BeforeEach
-//	void setUp() {
-//		flightController = new FlightController(flightService);
-//	}
+//    @Test
+//    void addFlight() {
+//        Flight flight = new Flight();
+//        flight.setId("FL1");
 //
-//	@Test
-//	void addFlight_shouldDelegateToServiceAndReturnSuccessMessage() {
-//		LocalDateTime dep = LocalDateTime.parse("2025-12-01T10:00");
-//		LocalDateTime arr = LocalDateTime.parse("2025-12-01T11:30");
+//        Mockito.when(flightService.addFlight(any()))
+//                .thenReturn(Mono.just(flight));
 //
-//		Flight flight = new Flight();
-//		flight.setAirline("Indigo");
-//		flight.setFromPlace("BLR");
-//		flight.setToPlace("HYD");
-//		flight.setDepartureTime(dep);
-//		flight.setArrivalTime(arr);
-//		flight.setTotalSeats(100);
-//		flight.setPrice(2500.0f);
+//        webTestClient
+//                .post()
+//                .uri("/api/flight/airline/inventory/add")
+//                .contentType(MediaType.APPLICATION_JSON)
+//                .bodyValue(flight)
+//                .exchange()
+//                .expectStatus().isCreated()
+//                .expectBody(String.class)
+//                .isEqualTo("Flight added successfully with id: FL1");
+//    }
 //
-//		Flight saved = new Flight();
-//		saved.setId("flight-123");
+//    @Test
+//    void searchFlights() {
+//        Mockito.when(flightService.search(any()))
+//                .thenReturn(Mono.just(List.of(new Flight())));
 //
-//		when(flightService.addFlight(any(Flight.class))).thenReturn(Mono.just(saved));
+//        webTestClient
+//                .post()
+//                .uri("/api/flight/search")
+//                .contentType(MediaType.APPLICATION_JSON)
+//                .bodyValue(new FlightSearchRequest())
+//                .exchange()
+//                .expectStatus().isOk()
+//                .expectBodyList(Flight.class)
+//                .hasSize(1);
+//    }
 //
-//		Mono<String> result = flightController.addFlight(flight);
+//    @Test
+//    void reserveSeats() {
+//        Mockito.when(flightService.reserveSeats("FL1", 2))
+//                .thenReturn(Mono.just(new Flight()));
 //
-//		StepVerifier.create(result).expectNext("Flight added successfully with id: flight-123").verifyComplete();
+//        webTestClient
+//                .put()
+//                .uri("/api/flight/internal/FL1/reserve/2")
+//                .exchange()
+//                .expectStatus().isOk();
+//    }
 //
-//		ArgumentCaptor<Flight> captor = ArgumentCaptor.forClass(Flight.class);
-//		verify(flightService, times(1)).addFlight(captor.capture());
+//    @Test
+//    void releaseSeats() {
+//        Mockito.when(flightService.releaseSeats("FL1", 2))
+//                .thenReturn(Mono.just(new Flight()));
 //
-//		Flight passed = captor.getValue();
-//		assertThat(passed).isSameAs(flight);
-//		assertThat(passed.getAirline()).isEqualTo("Indigo");
-//		assertThat(passed.getFromPlace()).isEqualTo("BLR");
-//		assertThat(passed.getToPlace()).isEqualTo("HYD");
-//		assertThat(passed.getDepartureTime()).isEqualTo(dep);
-//		assertThat(passed.getArrivalTime()).isEqualTo(arr);
-//		assertThat(passed.getTotalSeats()).isEqualTo(100);
-//		assertThat(passed.getPrice()).isEqualTo(2500.0f);
-//	}
+//        webTestClient
+//                .put()
+//                .uri("/api/flight/internal/FL1/release/2")
+//                .exchange()
+//                .expectStatus().isOk();
+//    }
 //
-//	
+//    @Test
+//    void getAllFlights() {
+//        Mockito.when(flightService.getAllFlights())
+//                .thenReturn(Flux.just(new Flight()));
 //
-//	@Test
-//	void reserveSeats_shouldCallServiceAndReturnMono() {
-//		Flight flight = new Flight();
-//		flight.setId("f1");
+//        webTestClient
+//                .get()
+//                .uri("/api/flight/getallflights")
+//                .exchange()
+//                .expectStatus().isOk()
+//                .expectBodyList(Flight.class)
+//                .hasSize(1);
+//    }
 //
-//		when(flightService.reserveSeats("f1", 2)).thenReturn(Mono.just(flight));
+//    @Test
+//    void searchByAirline() {
+//        Mockito.when(flightService.searchFlightsByAirline("BLR", "DEL", "Indigo"))
+//                .thenReturn(Flux.just(new Flight()));
 //
-//		Mono<Flight> result = flightController.reserveSeats("f1", 2);
+//        webTestClient
+//                .post()
+//                .uri("/api/flight/search/airline")
+//                .contentType(MediaType.APPLICATION_JSON)
+//                .bodyValue(Map.of(
+//                        "fromPlace", "BLR",
+//                        "toPlace", "DEL",
+//                        "airline", "Indigo"
+//                ))
+//                .exchange()
+//                .expectStatus().isOk()
+//                .expectBodyList(Flight.class)
+//                .hasSize(1);
+//    }
 //
-//		StepVerifier.create(result).expectNext(flight).verifyComplete();
+//    @Test
+//    void getFlightById() {
+//        Flight flight = new Flight();
+//        flight.setId("FL1");
 //
-//		verify(flightService).reserveSeats("f1", 2);
-//	}
+//        Mockito.when(flightService.searchFlightById("FL1"))
+//                .thenReturn(Mono.just(flight));
 //
-//	@Test
-//	void releaseSeats_shouldCallServiceAndReturnMono() {
-//		Flight flight = new Flight();
-//		flight.setId("f1");
+//        webTestClient
+//                .get()
+//                .uri("/api/flight/FL1")
+//                .exchange()
+//                .expectStatus().isOk()
+//                .expectBody()
+//                .jsonPath("$.id").isEqualTo("FL1");
+//    }
 //
-//		when(flightService.releaseSeats("f1", 2)).thenReturn(Mono.just(flight));
+//    @Test
+//    void updateFlight() {
+//        Mockito.when(flightService.updateFlight(eq("FL1"), any()))
+//                .thenReturn(Mono.just(new Flight()));
 //
-//		Mono<Flight> result = flightController.releaseSeats("f1", 2);
+//        webTestClient
+//                .put()
+//                .uri("/api/flight/update/FL1")
+//                .contentType(MediaType.APPLICATION_JSON)
+//                .bodyValue(new Flight())
+//                .exchange()
+//                .expectStatus().isOk()
+//                .expectBody(String.class)
+//                .isEqualTo("Flight updated successfully");
+//    }
 //
-//		StepVerifier.create(result).expectNext(flight).verifyComplete();
+//    @Test
+//    void deleteFlight() {
+//        Mockito.when(flightService.deleteFlight("FL1"))
+//                .thenReturn(Mono.empty());
 //
-//		verify(flightService).releaseSeats("f1", 2);
-//	}
-//
-//	@Test
-//	void getAllFlights_shouldReturnFluxFromService() {
-//		Flight f1 = new Flight();
-//		f1.setId("f1");
-//		Flight f2 = new Flight();
-//		f2.setId("f2");
-//
-//		when(flightService.getAllFlights()).thenReturn(Flux.just(f1, f2));
-//
-//		Flux<Flight> result = flightController.getAllFlights();
-//
-//		StepVerifier.create(result).expectNext(f1).expectNext(f2).verifyComplete();
-//
-//		verify(flightService).getAllFlights();
-//	}
-//
-//	@Test
-//	void searchByAirline_shouldUseRequestBodyMap() {
-//		Flight f1 = new Flight();
-//		f1.setId("f1");
-//
-//		when(flightService.searchFlightsByAirline("BLR", "DEL", "Indigo")).thenReturn(Flux.just(f1));
-//
-//		Map<String, String> body = Map.of("fromPlace", "BLR", "toPlace", "DEL", "airline", "Indigo");
-//
-//		Flux<Flight> result = flightController.searchByAirline(body);
-//
-//		StepVerifier.create(result).expectNext(f1).verifyComplete();
-//
-//		verify(flightService).searchFlightsByAirline("BLR", "DEL", "Indigo");
-//	}
-//
-//	@Test
-//	void getFlightById_shouldDelegateToService() {
-//		Flight f = new Flight();
-//		f.setId("f1");
-//
-//		when(flightService.searchFlightById("f1")).thenReturn(Mono.just(f));
-//
-//		Mono<Flight> result = flightController.getFlightById("f1");
-//
-//		StepVerifier.create(result).expectNext(f).verifyComplete();
-//
-//		verify(flightService).searchFlightById("f1");
-//	}
+//        webTestClient
+//                .delete()
+//                .uri("/api/flight/delete/FL1")
+//                .exchange()
+//                .expectStatus().isOk()
+//                .expectBody(String.class)
+//                .isEqualTo("Flight deleted successfully");
+//    }
 //}
