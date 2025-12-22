@@ -1,7 +1,7 @@
 package com.flightapp.dto;
 
 import java.time.LocalDateTime;
-
+import java.time.ZonedDateTime;
 public class FlightDto {
 	private String id;
 	private String flightNumber;
